@@ -4,7 +4,7 @@ interface Item<T> {
 }
 
 interface FunctionWithBackpack<T extends (...args: any) => Promise<any>> {
-  functionWithBackpack: (...args: Parameters<T>) => Promise<Awaited<T>>;
+  functionWithBackpack: T;
   emptyBackpack: () => void;
 }
 
@@ -21,11 +21,9 @@ export function carryBackpack<T extends (...args: any[]) => Promise<any>>(
 ): FunctionWithBackpack<T> {
   if (!params.initialVersion) params.initialVersion = String(Date.now());
   const { fn, getLatestItemVersion, initialVersion, makeNoise } = params;
-  const backpack = new Map<string, Item<Awaited<T>>>();
+  const backpack = new Map<string, Item<Awaited<ReturnType<T>>>>();
 
-  const functionWithBackpack = async (
-    ...args: Parameters<T>
-  ): Promise<Awaited<T>> => {
+  const functionWithBackpack = (async (...args) => {
     const serializedArgs = JSON.stringify(args);
 
     const currVersion = backpack.get(serializedArgs)?.version ?? initialVersion;
@@ -42,7 +40,7 @@ export function carryBackpack<T extends (...args: any[]) => Promise<any>>(
     }
 
     // Erase cache if the cached value is an error.
-    const promisedValue = backpack.get(serializedArgs)?.val as ReturnType<T>;
+    const promisedValue = backpack.get(serializedArgs)?.val;
     try {
       return await promisedValue;
     } catch (error) {
@@ -50,7 +48,7 @@ export function carryBackpack<T extends (...args: any[]) => Promise<any>>(
       backpack.delete(serializedArgs);
       return promisedValue;
     }
-  };
+  }) as T;
 
   function emptyBackpack() {
     backpack.clear();
