@@ -1,0 +1,21 @@
+{
+  "name": "cache-backpack",
+  "repository": {
+    "type": "git",
+    "url:": "https://github.com/beipack/cache-backpack.git"
+  },
+  "version": "0.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "prepublish": "tsc",
+  "author": "Lawrence Koh, Phan Shi Yu",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^4.7.4"
+  }
+}
