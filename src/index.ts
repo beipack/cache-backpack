@@ -8,12 +8,19 @@ interface FunctionWithBackpack<T extends (...args: any) => Promise<any>> {
   emptyBackpack: () => void;
 }
 
+export interface CarryBackpackParams<
+  T extends (...args: any[]) => Promise<any>
+> {
+  fn: T;
+  getLatestItemVersion: () => string;
+  initialVersion?: string;
+  makeNoise?: boolean;
+}
 export function carryBackpack<T extends (...args: any[]) => Promise<any>>(
-  fn: T,
-  getLatestItemVersion: () => string,
-  initialVersion = String(Date.now()),
-  makeNoise = false
+  params: CarryBackpackParams<T>
 ): FunctionWithBackpack<T> {
+  if (!params.initialVersion) params.initialVersion = String(Date.now());
+  const { fn, getLatestItemVersion, initialVersion, makeNoise } = params;
   const backpack = new Map<string, Item<Awaited<T>>>();
 
   const functionWithBackpack = async (
