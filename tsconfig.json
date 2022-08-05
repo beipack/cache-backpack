@@ -6,7 +6,8 @@
     "declaration": true,
     "outDir": "dist",
     "strict": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "moduleResolution": "node" // I think this goes against module UMD
   },
   "exclude": ["node_modules", "dist"]
 }
