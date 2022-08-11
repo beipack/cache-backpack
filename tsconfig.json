@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "module": "ES6", // supported by most browsers
+    "module": "CommonJS",
     "moduleResolution": "node",
     "target": "es5",
     "lib": ["es2017", "es7", "es6", "dom"],
