@@ -3,8 +3,8 @@ interface Item<T> {
   version: string;
 }
 
-interface FunctionWithBackpack<T extends (...args: any) => Promise<any>> {
-  functionWithBackpack: T;
+interface FnWithBackpack<T extends (...args: any) => Promise<any>> {
+  fnWithBackpack: T;
   emptyBackpack: () => void;
 }
 
@@ -18,12 +18,12 @@ export interface CarryBackpackParams<
 }
 export function carryBackpack<T extends (...args: any[]) => Promise<any>>(
   params: CarryBackpackParams<T>
-): FunctionWithBackpack<T> {
+): FnWithBackpack<T> {
   if (!params.initialVersion) params.initialVersion = String(Date.now());
   const { fn, getLatestItemVersion, initialVersion, makeNoise } = params;
   const backpack = new Map<string, Item<Awaited<ReturnType<T>>>>();
 
-  const functionWithBackpack = (async (...args) => {
+  const fnWithBackpack = (async (...args) => {
     const serializedArgs = JSON.stringify(args);
 
     const currVersion = backpack.get(serializedArgs)?.version ?? initialVersion;
@@ -50,9 +50,5 @@ export function carryBackpack<T extends (...args: any[]) => Promise<any>>(
     }
   }) as T;
 
-  function emptyBackpack() {
-    backpack.clear();
-  }
-
-  return { functionWithBackpack, emptyBackpack };
+  return { fnWithBackpack, emptyBackpack: () => () => backpack.clear() };
 }
