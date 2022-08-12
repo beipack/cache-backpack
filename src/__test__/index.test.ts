@@ -54,6 +54,15 @@ describe(carryBackpack, function () {
             expect(await fnWithBackpack()).toEqual(11)
             expect(await fnWithBackpack()).toEqual(11)
         })
+
+        it('simple fn, should ignore version change', async () => {
+            const { fnWithBackpack } = carryBackpack({fn: async () => await fn(10)})
+            expect(await fnWithBackpack()).toEqual(11)
+            expect(await fnWithBackpack()).toEqual(11)
+            version = '1'
+            expect(await fnWithBackpack()).toEqual(11)
+            expect(await fnWithBackpack()).toEqual(11)
+        })
     })
 
     describe('backpack with versioning.', () => {
