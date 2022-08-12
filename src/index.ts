@@ -30,24 +30,22 @@ export function carryBackpack<T extends (...args: any[]) => Promise<any>>(
   const fnWithBackpack = (async (...args) => {
     const serializedArgs = JSON.stringify(args);
 
-    /* backpack-item versioning */
-    let itemOutdated = false
-    let currVersion, nextVersion = initialVersion;
+    const item = backpack.get(serializedArgs);
 
-    if (version) {
-      /* if user has opt-in to versioning, compare curr and next versions. */
-      currVersion = backpack.get(serializedArgs)?.version ?? initialVersion;
-      nextVersion = version.get();
-      itemOutdated = currVersion !== nextVersion;
-    }
+    /* backpack item-versioning */
+    const itemCachedVersion = item?.version ?? initialVersion;
+    const itemActualVersion = version ? version.get() : initialVersion;
+    /* default to false if user did not opt-in to versioning */
+    const itemOutdated = version ? itemCachedVersion !== itemActualVersion : false;
 
-    if (itemOutdated) {
+    // if backpack does not have this entry or item outdated
+    if (!backpack.has(serializedArgs) || itemOutdated) {
       if (makeNoise) console.log("Cache version is outdated.");
 
       const requestPromise = fn(...args);
       backpack.set(serializedArgs, {
         val: requestPromise,
-        version: nextVersion,
+        version: itemActualVersion,
       });
     }
 

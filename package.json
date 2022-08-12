@@ -10,7 +10,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "jest",
+    "test": "jest --testPathIgnorePatterns='.js'",
     "prepublishOnly": "npm run build"
   },
   "author": "Lawrence Koh, Phan Shi Yu",
