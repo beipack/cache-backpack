@@ -12,24 +12,36 @@ export interface CarryBackpackParams<
   T extends (...args: any[]) => Promise<any>
 > {
   fn: T;
-  getLatestItemVersion: () => string;
-  initialVersion?: string;
+  /* each Item is tagged with a version. if get() does not match item version, requestPromise again */
+  version?: {
+    get: () => string; // cb() to get the latest version of the item
+    initial?: string; // initial version number. if left empty, String(Date.now()) should be the default
+  }
   makeNoise?: boolean;
 }
+
 export function carryBackpack<T extends (...args: any[]) => Promise<any>>(
   params: CarryBackpackParams<T>
 ): FnWithBackpack<T> {
-  if (!params.initialVersion) params.initialVersion = String(Date.now());
-  const { fn, getLatestItemVersion, initialVersion, makeNoise } = params;
+  const { fn, version, makeNoise } = params;
+  const initialVersion = version?.initial ?? String(Date.now());
   const backpack = new Map<string, Item<Awaited<ReturnType<T>>>>();
 
   const fnWithBackpack = (async (...args) => {
     const serializedArgs = JSON.stringify(args);
 
-    const currVersion = backpack.get(serializedArgs)?.version ?? initialVersion;
-    const nextVersion = getLatestItemVersion();
+    /* backpack-item versioning */
+    let itemOutdated = false
+    let currVersion, nextVersion = initialVersion;
 
-    if (currVersion !== nextVersion) {
+    if (version) {
+      /* if user has opt-in to versioning, compare curr and next versions. */
+      currVersion = backpack.get(serializedArgs)?.version ?? initialVersion;
+      nextVersion = version.get();
+      itemOutdated = currVersion !== nextVersion;
+    }
+
+    if (itemOutdated) {
       if (makeNoise) console.log("Cache version is outdated.");
 
       const requestPromise = fn(...args);
@@ -50,5 +62,9 @@ export function carryBackpack<T extends (...args: any[]) => Promise<any>>(
     }
   }) as T;
 
-  return { fnWithBackpack, emptyBackpack: () => () => backpack.clear() };
+  function emptyBackpack() {
+    backpack.clear();
+  }
+
+  return { fnWithBackpack, emptyBackpack };
 }
