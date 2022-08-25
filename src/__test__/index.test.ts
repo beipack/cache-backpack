@@ -51,9 +51,11 @@ describe(carryBackpack, function () {
             const { fnWithBackpack, emptyBackpack, throwItem } = carryBackpack({ fn })
             expect(await fnWithBackpack(10)).toEqual(11)
             expect(await fnWithBackpack(10)).toEqual(11)
+
             emptyBackpack()
             expect(await fnWithBackpack(10)).toEqual(12)
             expect(await fnWithBackpack(10)).toEqual(12)
+
             throwItem(10)
             expect(await fnWithBackpack(10)).toEqual(13)
             expect(await fnWithBackpack(10)).toEqual(13)
@@ -66,15 +68,25 @@ describe(carryBackpack, function () {
             const { fnWithBackpack, emptyBackpack, throwItem } = carryBackpack({fn, expiry: { ttl: 10 }})
             expect(await fnWithBackpack(10)).toEqual(11)
             expect(await fnWithBackpack(10)).toEqual(11)
+
+            jest.useFakeTimers().setSystemTime(new Date('2000-01-01T00:00:05')); // have not expired yet
+            expect(await fnWithBackpack(10)).toEqual(11)
+
             jest.useFakeTimers().setSystemTime(new Date('2000-01-01T00:00:11'));
             expect(await fnWithBackpack(10)).toEqual(12)
             expect(await fnWithBackpack(10)).toEqual(12)
+
+            jest.useFakeTimers().setSystemTime(new Date('2000-01-01T00:00:22')); // should expire again
+            expect(await fnWithBackpack(10)).toEqual(13)
+            expect(await fnWithBackpack(10)).toEqual(13)
+
             emptyBackpack()
-            expect(await fnWithBackpack(10)).toEqual(13)
-            expect(await fnWithBackpack(10)).toEqual(13)
+            expect(await fnWithBackpack(10)).toEqual(14)
+            expect(await fnWithBackpack(10)).toEqual(14)
+
             throwItem(10)
-            expect(await fnWithBackpack(10)).toEqual(14)
-            expect(await fnWithBackpack(10)).toEqual(14)
+            expect(await fnWithBackpack(10)).toEqual(15)
+            expect(await fnWithBackpack(10)).toEqual(15)
         })
     })
 
