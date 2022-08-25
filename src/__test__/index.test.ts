@@ -100,20 +100,20 @@ describe(carryBackpack, function () {
             it(`${run.name}| fn that takes in single arg, throwItem() should only affect a single item`, async () => {    
                 const { fnWithBackpack, throwItem } = carryBackpack({fn, ...run.options })
         
+                expect(await fnWithBackpack(10)).toEqual(11) // item '10'
                 expect(await fnWithBackpack(10)).toEqual(11)
-                expect(await fnWithBackpack(10)).toEqual(11)
-                expect(await fnWithBackpack(20)).toEqual(22)
+                expect(await fnWithBackpack(20)).toEqual(22) // item '20'
                 expect(await fnWithBackpack(20)).toEqual(22)
 
-                throwItem(10)
-                expect(await fnWithBackpack(20)).toEqual(22) // count does not increment
-                expect(await fnWithBackpack(10)).toEqual(13) // count increments
-                expect(await fnWithBackpack(20)).toEqual(22) // still does not increment
+                throwItem(10) // only item '10' is thrown
+                expect(await fnWithBackpack(20)).toEqual(22) // item '20' not affected
+                expect(await fnWithBackpack(10)).toEqual(13) // item '10' increments
+                expect(await fnWithBackpack(20)).toEqual(22) // item '20' still not affected
 
-                throwItem(20)
-                expect(await fnWithBackpack(10)).toEqual(13) // count does not increment
-                expect(await fnWithBackpack(20)).toEqual(24) // now count increments
-                expect(await fnWithBackpack(10)).toEqual(13) // still does not increment
+                throwItem(20)// only item '20' is thrown
+                expect(await fnWithBackpack(10)).toEqual(13) // item '10' not affected
+                expect(await fnWithBackpack(20)).toEqual(24) // item '20' increments
+                expect(await fnWithBackpack(10)).toEqual(13) // item '10' still not affected
             })
         })
 
