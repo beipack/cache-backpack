@@ -1,5 +1,6 @@
 import { carryBackpack } from '../index'
 
+
 describe(carryBackpack, function () {
     /* declaring the many diff types of functions / scenarios */
     let fnCounter = 0
@@ -35,9 +36,6 @@ describe(carryBackpack, function () {
             }, 10)
         })
     }
-        
-
-    let version = '0'
 
     afterEach(() => {
         /* reset environment */
@@ -45,58 +43,68 @@ describe(carryBackpack, function () {
         multiArgFnCounter = 0
         slowFnCounter = 0
         failingFnCounter = 0
-        version = '0'
+        jest.useRealTimers()
     })
 
     describe('plain ol backpack.', () => {        
         it('simple fn, should use cached values', async () => {
-            const { fnWithBackpack } = carryBackpack({fn: async () => await fn(10)})
-            expect(await fnWithBackpack()).toEqual(11)
-            expect(await fnWithBackpack()).toEqual(11)
-        })
-
-        it('simple fn, should ignore version change', async () => {
-            const { fnWithBackpack } = carryBackpack({fn: async () => await fn(10)})
-            expect(await fnWithBackpack()).toEqual(11)
-            expect(await fnWithBackpack()).toEqual(11)
-            version = '1'
-            expect(await fnWithBackpack()).toEqual(11)
-            expect(await fnWithBackpack()).toEqual(11)
+            const { fnWithBackpack, emptyBackpack, throwItem } = carryBackpack({ fn })
+            expect(await fnWithBackpack(10)).toEqual(11)
+            expect(await fnWithBackpack(10)).toEqual(11)
+            emptyBackpack()
+            expect(await fnWithBackpack(10)).toEqual(12)
+            expect(await fnWithBackpack(10)).toEqual(12)
+            throwItem(10)
+            expect(await fnWithBackpack(10)).toEqual(13)
+            expect(await fnWithBackpack(10)).toEqual(13)
         })
     })
 
-    describe('backpack with versioning.', () => {
-        it('backpack not set with initial version, should use cached value and update when version changed', async () => {
-            const { fnWithBackpack, emptyBackpack } = carryBackpack({fn: async () => await fn(10), version: { get: () => version }})
-            expect(await fnWithBackpack()).toEqual(11)
-            expect(await fnWithBackpack()).toEqual(11)
-            version = '1'
-            expect(await fnWithBackpack()).toEqual(12)
-            expect(await fnWithBackpack()).toEqual(12)
+    describe('backpack with expiry.', () => {
+        it('backpack set with ttl of 10 seconds, should use cached value and update when item expired', async () => {
+            jest.useFakeTimers().setSystemTime(new Date('2000-01-01T00:00:00'));
+            const { fnWithBackpack, emptyBackpack, throwItem } = carryBackpack({fn, expiry: { ttl: 10 }})
+            expect(await fnWithBackpack(10)).toEqual(11)
+            expect(await fnWithBackpack(10)).toEqual(11)
+            jest.useFakeTimers().setSystemTime(new Date('2000-01-01T00:00:11'));
+            expect(await fnWithBackpack(10)).toEqual(12)
+            expect(await fnWithBackpack(10)).toEqual(12)
             emptyBackpack()
-            expect(await fnWithBackpack()).toEqual(13)
-            expect(await fnWithBackpack()).toEqual(13)
-        })
-
-        it('backpack set with initial version, should use cached value and update when version changed', async () => {
-            const { fnWithBackpack, emptyBackpack } = carryBackpack({fn: async () => await fn(10), version: { get: () => version, initial: '0' }})
-            expect(await fnWithBackpack()).toEqual(11)
-            expect(await fnWithBackpack()).toEqual(11)
-            version = '1'
-            expect(await fnWithBackpack()).toEqual(12)
-            expect(await fnWithBackpack()).toEqual(12)
-            emptyBackpack()
-            expect(await fnWithBackpack()).toEqual(13)
-            expect(await fnWithBackpack()).toEqual(13)
+            expect(await fnWithBackpack(10)).toEqual(13)
+            expect(await fnWithBackpack(10)).toEqual(13)
+            throwItem(10)
+            expect(await fnWithBackpack(10)).toEqual(14)
+            expect(await fnWithBackpack(10)).toEqual(14)
         })
     })
 
     describe('various scenarios', () => {
         const runs = [
             {name: 'plain ol backpack', options: {}},
-            {name: 'backpack with versioning', options: { version: { get: () => version } }},
-            
+            {name: 'backpack with expiry', options: { expiry: { ttl: 10 } }},
         ];
+
+        runs.forEach(run => {
+            it(`${run.name}| fn that takes in single arg, throwItem() should only affect a single item`, async () => {    
+                const { fnWithBackpack, throwItem } = carryBackpack({fn, ...run.options })
+        
+                expect(await fnWithBackpack(10)).toEqual(11)
+                expect(await fnWithBackpack(10)).toEqual(11)
+                expect(await fnWithBackpack(20)).toEqual(22)
+                expect(await fnWithBackpack(20)).toEqual(22)
+
+                throwItem(10)
+                expect(await fnWithBackpack(20)).toEqual(22) // count does not increment
+                expect(await fnWithBackpack(10)).toEqual(13) // count increments
+                expect(await fnWithBackpack(20)).toEqual(22) // still does not increment
+
+                throwItem(20)
+                expect(await fnWithBackpack(10)).toEqual(13) // count does not increment
+                expect(await fnWithBackpack(20)).toEqual(24) // now count increments
+                expect(await fnWithBackpack(10)).toEqual(13) // still does not increment
+            })
+        })
+
         runs.forEach(run => {
             it(`${run.name}| fn that takes in multiple values, should cache for each unique set of args`, async () => {    
                 const { fnWithBackpack } = carryBackpack({fn: multiArgFn, ...run.options })
