@@ -1,41 +1,47 @@
 interface Item<T> {
   val: Promise<T>;
-  version: string;
+  lastRetrieved: number;
 }
 
-interface FunctionWithBackpack<T extends (...args: any) => Promise<any>> {
-  functionWithBackpack: T;
+interface FnWithBackpack<T extends (...args: any) => Promise<any>> {
+  fnWithBackpack: T;
   emptyBackpack: () => void;
+  throwItem: (...args: Parameters<T>) => void;
 }
 
 export interface CarryBackpackParams<
   T extends (...args: any[]) => Promise<any>
 > {
   fn: T;
-  getLatestItemVersion: () => string;
-  initialVersion?: string;
+  expiry?: { ttlInSec: number }
   makeNoise?: boolean;
 }
+
 export function carryBackpack<T extends (...args: any[]) => Promise<any>>(
   params: CarryBackpackParams<T>
-): FunctionWithBackpack<T> {
-  if (!params.initialVersion) params.initialVersion = String(Date.now());
-  const { fn, getLatestItemVersion, initialVersion, makeNoise } = params;
+): FnWithBackpack<T> {
+  const { fn, expiry, makeNoise } = params;
   const backpack = new Map<string, Item<Awaited<ReturnType<T>>>>();
 
-  const functionWithBackpack = (async (...args) => {
+  const fnWithBackpack = (async (...args) => {
     const serializedArgs = JSON.stringify(args);
+    const item = backpack.get(serializedArgs);
 
-    const currVersion = backpack.get(serializedArgs)?.version ?? initialVersion;
-    const nextVersion = getLatestItemVersion();
+    const currentTs = Date.now(); // in miliseconds
+    const lastRetrieved = item?.lastRetrieved ?? 0;
+    const itemExpired = !expiry ? false : lastRetrieved + expiry.ttlInSec * 1000 <= currentTs;
 
-    if (currVersion !== nextVersion) {
-      if (makeNoise) console.log("Cache version is outdated.");
+    // if backpack does not have this entry or item expired
+    if (!backpack.has(serializedArgs) || itemExpired) {
+      if (makeNoise) {
+        if (itemExpired) console.log("item has expired... calling function");
+        else console.log("Cache miss... calling function");
+      }
 
       const requestPromise = fn(...args);
       backpack.set(serializedArgs, {
         val: requestPromise,
-        version: nextVersion,
+        lastRetrieved: currentTs,
       });
     }
 
@@ -54,5 +60,10 @@ export function carryBackpack<T extends (...args: any[]) => Promise<any>>(
     backpack.clear();
   }
 
-  return { functionWithBackpack, emptyBackpack };
+  function throwItem(...args: Parameters<T>) {
+    const serializedArgs = JSON.stringify(args);
+    backpack.delete(serializedArgs);
+  }
+
+  return { fnWithBackpack, emptyBackpack, throwItem };
 }

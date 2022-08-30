@@ -1,119 +1,166 @@
 import { carryBackpack } from '../index'
 
-describe(carryBackpack, function () {
-    let counter = 0
-    let version = '0'
-    async function fnToWrap(arg1: number) {
-        counter += 1
-        return counter + arg1
-    }
-    let functionWithBackpack: (arg1: void) => Promise<number>
-    let emptyBackpack: () => void
 
-    beforeEach(() => {
-        counter = 0
-        version = '0'
-        const cacheObj = carryBackpack({fn: async () => await fnToWrap(10), getLatestItemVersion: () => version})
-        functionWithBackpack = cacheObj.functionWithBackpack
-        emptyBackpack = cacheObj.emptyBackpack
-    })
+describe(carryBackpack, function () {
+    /* declaring the many diff types of functions / scenarios */
+    let fnCounter = 0
+    async function fn(arg1: number) {
+        fnCounter += 1
+        return fnCounter + arg1
+    }
+
+    let multiArgFnCounter = 0
+    async function multiArgFn(arg1: string, arg2: string) {
+        multiArgFnCounter += 1
+        return Promise.resolve(
+            `processed ${arg1} and ${arg2} with ${multiArgFnCounter}`
+        )
+    }
+
+    let slowFnCounter = 0
+    async function slowFn() {
+        await new Promise((f) => {
+            setTimeout(f, 10)
+        })
+        slowFnCounter += 1
+        return slowFnCounter
+    }
+
+    let failingFnCounter = 0
+    async function failingFn() {
+        return new Promise((resolve, reject) => {
+            setTimeout(() => {
+                failingFnCounter += 1
+                if (failingFnCounter === 1) reject(new Error('1st call fails'))
+                else resolve(failingFnCounter)
+            }, 10)
+        })
+    }
 
     afterEach(() => {
-        emptyBackpack()
+        /* reset environment */
+        fnCounter = 0
+        multiArgFnCounter = 0
+        slowFnCounter = 0
+        failingFnCounter = 0
+        jest.useRealTimers()
     })
 
-    it('should call the underlying provider function on first call', async () => {
-        expect(await functionWithBackpack()).toEqual(11)
+    describe('plain ol backpack.', () => {        
+        it('simple fn, should use cached values', async () => {
+            const { fnWithBackpack, emptyBackpack, throwItem } = carryBackpack({ fn })
+            expect(await fnWithBackpack(10)).toEqual(11)
+            expect(await fnWithBackpack(10)).toEqual(11)
+
+            emptyBackpack()
+            expect(await fnWithBackpack(10)).toEqual(12)
+            expect(await fnWithBackpack(10)).toEqual(12)
+
+            throwItem(10)
+            expect(await fnWithBackpack(10)).toEqual(13)
+            expect(await fnWithBackpack(10)).toEqual(13)
+        })
     })
 
-    it('should use cached value while cache is not bust', async () => {
-        expect(await functionWithBackpack()).toEqual(11)
-        expect(await functionWithBackpack()).toEqual(11)
+    describe('backpack with expiry.', () => {
+        it('backpack set with ttl of 10 seconds, should use cached value and update when item expired', async () => {
+            jest.useFakeTimers().setSystemTime(new Date('2000-01-01T00:00:00'));
+            const { fnWithBackpack, emptyBackpack, throwItem } = carryBackpack({fn, expiry: { ttlInSec: 10 }})
+            expect(await fnWithBackpack(10)).toEqual(11)
+            expect(await fnWithBackpack(10)).toEqual(11)
+
+            jest.useFakeTimers().setSystemTime(new Date('2000-01-01T00:00:05')); // have not expired yet
+            expect(await fnWithBackpack(10)).toEqual(11)
+
+            jest.useFakeTimers().setSystemTime(new Date('2000-01-01T00:00:11'));
+            expect(await fnWithBackpack(10)).toEqual(12)
+            expect(await fnWithBackpack(10)).toEqual(12)
+
+            jest.useFakeTimers().setSystemTime(new Date('2000-01-01T00:00:22')); // should expire again
+            expect(await fnWithBackpack(10)).toEqual(13)
+            expect(await fnWithBackpack(10)).toEqual(13)
+
+            emptyBackpack()
+            expect(await fnWithBackpack(10)).toEqual(14)
+            expect(await fnWithBackpack(10)).toEqual(14)
+
+            throwItem(10)
+            expect(await fnWithBackpack(10)).toEqual(15)
+            expect(await fnWithBackpack(10)).toEqual(15)
+        })
     })
 
-    it('Busting cache should result in provider being called again even when env var not initially set', async () => {
-        expect(await functionWithBackpack()).toEqual(11)
-        version = '1'
-        expect(await functionWithBackpack()).toEqual(12)
-    })
+    describe('various scenarios', () => {
+        const runs = [
+            {name: 'plain ol backpack', options: {}},
+            {name: 'backpack with expiry', options: { expiry: { ttlInSec: 10 } }},
+        ];
 
-    it('Busting cache should result in provider being called again', async () => {
-        expect(await functionWithBackpack()).toEqual(11)
-        emptyBackpack()
-        expect(await functionWithBackpack()).toEqual(12)
-    })
+        runs.forEach(run => {
+            it(`${run.name}| fn that takes in single arg, throwItem() should only affect a single item`, async () => {    
+                const { fnWithBackpack, throwItem } = carryBackpack({fn, ...run.options })
+        
+                expect(await fnWithBackpack(10)).toEqual(11) // item '10'
+                expect(await fnWithBackpack(10)).toEqual(11)
+                expect(await fnWithBackpack(20)).toEqual(22) // item '20'
+                expect(await fnWithBackpack(20)).toEqual(22)
 
-    it('should call the underlying provider after cache is busted', async () => {
-        expect(await functionWithBackpack()).toEqual(11)
-        version = '1'
-        expect(await functionWithBackpack()).toEqual(12)
-    })
+                throwItem(10) // only item '10' is thrown
+                expect(await fnWithBackpack(20)).toEqual(22) // item '20' not affected
+                expect(await fnWithBackpack(10)).toEqual(13) // item '10' increments
+                expect(await fnWithBackpack(20)).toEqual(22) // item '20' still not affected
 
-    it('should call underlying provider for different args', async () => {
-        let variableCounter = 0
-        async function variableExpensiveCall(arg1: string, arg2: string) {
-            variableCounter += 1
-            return Promise.resolve(
-                `processed ${arg1} and ${arg2} with ${variableCounter}`
-            )
-        }
-
-        const { functionWithBackpack } = carryBackpack({fn: variableExpensiveCall, getLatestItemVersion: () => version})
-
-        expect(await functionWithBackpack('sheep', 'goat')).toEqual(
-            'processed sheep and goat with 1'
-        )
-        expect(await functionWithBackpack('cow', 'cow')).toEqual(
-            'processed cow and cow with 2'
-        )
-        expect(await functionWithBackpack('sheep', 'cow')).toEqual(
-            'processed sheep and cow with 3'
-        )
-        expect(await functionWithBackpack('sheep', 'goat')).toEqual(
-            'processed sheep and goat with 1'
-        )
-    })
-
-    it('should call underlying provider once even for 2 parallel calls', async () => {
-        let variableCounter = 0
-        async function expensiveCounterCall() {
-            await new Promise((f) => {
-                setTimeout(f, 10)
+                throwItem(20)// only item '20' is thrown
+                expect(await fnWithBackpack(10)).toEqual(13) // item '10' not affected
+                expect(await fnWithBackpack(20)).toEqual(24) // item '20' increments
+                expect(await fnWithBackpack(10)).toEqual(13) // item '10' still not affected
             })
-            variableCounter += 1
-            return variableCounter
-        }
+        })
 
-        const { functionWithBackpack } = carryBackpack({fn: expensiveCounterCall, getLatestItemVersion: () => version})
-        const parallelCalls = await Promise.all([
-            functionWithBackpack(),
-            functionWithBackpack(),
-        ])
-
-        expect(parallelCalls[0]).toEqual(1)
-        expect(parallelCalls[1]).toEqual(1)
-    })
-
-    it('should not cache errors of underlying function', async () => {
-        let variableCounter = 0
-        const failThenSucceed = () =>
-            new Promise((resolve, reject) => {
-                setTimeout(() => {
-                    variableCounter += 1
-                    if (variableCounter === 1) {
-                        reject(new Error('1st call fails'))
-                    } else {
-                        resolve(variableCounter)
-                    }
-                }, 10)
+        runs.forEach(run => {
+            it(`${run.name}| fn that takes in multiple values, should cache for each unique set of args`, async () => {    
+                const { fnWithBackpack } = carryBackpack({fn: multiArgFn, ...run.options })
+        
+                expect(await fnWithBackpack('sheep', 'goat')).toEqual(
+                    'processed sheep and goat with 1'
+                )
+                expect(await fnWithBackpack('cow', 'cow')).toEqual(
+                    'processed cow and cow with 2'
+                )
+                expect(await fnWithBackpack('sheep', 'cow')).toEqual(
+                    'processed sheep and cow with 3'
+                )
+                expect(await fnWithBackpack('sheep', 'goat')).toEqual(
+                    'processed sheep and goat with 1'
+                )
             })
+        })
 
-        const { functionWithBackpack } = carryBackpack({fn: failThenSucceed, getLatestItemVersion: () => version})
-        const parallelCalls = Promise.all([functionWithBackpack(), functionWithBackpack()])
-        await expect(parallelCalls).rejects.toEqual(new Error('1st call fails'))
+        runs.forEach(run => {
+            it(`${run.name}| slow fn, should invoke once for 2 parallel calls`, async () => {    
+                const { fnWithBackpack } = carryBackpack({fn: slowFn, ...run.options })
+        
+                const parallelCalls = await Promise.all([
+                    fnWithBackpack(),
+                    fnWithBackpack(),
+                ])
+        
+                expect(parallelCalls[0]).toEqual(1)
+                expect(parallelCalls[1]).toEqual(1)
+            })
+        })
 
-        // Serial call should avoid the cached error and make a second call.
-        expect(await functionWithBackpack()).toEqual(2)
-        expect(await functionWithBackpack()).toEqual(2)
+        runs.forEach(run => {
+            it(`${run.name}| fn that errors out on 1st call, should ignore failed call`, async () => {
+                const { fnWithBackpack } = carryBackpack({fn: failingFn, ...run.options })
+                const parallelCalls = Promise.all([fnWithBackpack(), fnWithBackpack()])
+                await expect(parallelCalls).rejects.toEqual(new Error('1st call fails'))
+        
+                // Serial call should avoid the cached error and make a second call.
+                expect(await fnWithBackpack()).toEqual(2)
+                expect(await fnWithBackpack()).toEqual(2)
+            })
+        })
+    
     })
 })
