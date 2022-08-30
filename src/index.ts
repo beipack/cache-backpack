@@ -6,14 +6,14 @@ interface Item<T> {
 interface FnWithBackpack<T extends (...args: any) => Promise<any>> {
   fnWithBackpack: T;
   emptyBackpack: () => void;
-  throwItem: (...args: any[]) => void;
+  throwItem: (...args: Parameters<T>) => void;
 }
 
 export interface CarryBackpackParams<
   T extends (...args: any[]) => Promise<any>
 > {
   fn: T;
-  expiry?: { ttl: number } // in seconds
+  expiry?: { ttlInSec: number }
   makeNoise?: boolean;
 }
 
@@ -29,11 +29,14 @@ export function carryBackpack<T extends (...args: any[]) => Promise<any>>(
 
     const currentTs = Date.now(); // in miliseconds
     const lastRetrieved = item?.lastRetrieved ?? 0;
-    const itemExpired = !expiry ? false : lastRetrieved + expiry.ttl * 1000 <= currentTs;
+    const itemExpired = !expiry ? false : lastRetrieved + expiry.ttlInSec * 1000 <= currentTs;
 
     // if backpack does not have this entry or item expired
     if (!backpack.has(serializedArgs) || itemExpired) {
-      if (makeNoise) console.log("Cache miss... calling function");
+      if (makeNoise) {
+        if (itemExpired) console.log("item has expired... calling function");
+        else console.log("Cache miss... calling function");
+      }
 
       const requestPromise = fn(...args);
       backpack.set(serializedArgs, {
@@ -57,7 +60,7 @@ export function carryBackpack<T extends (...args: any[]) => Promise<any>>(
     backpack.clear();
   }
 
-  function throwItem(...args: any[]) {
+  function throwItem(...args: Parameters<T>) {
     const serializedArgs = JSON.stringify(args);
     backpack.delete(serializedArgs);
   }

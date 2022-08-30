@@ -65,7 +65,7 @@ describe(carryBackpack, function () {
     describe('backpack with expiry.', () => {
         it('backpack set with ttl of 10 seconds, should use cached value and update when item expired', async () => {
             jest.useFakeTimers().setSystemTime(new Date('2000-01-01T00:00:00'));
-            const { fnWithBackpack, emptyBackpack, throwItem } = carryBackpack({fn, expiry: { ttl: 10 }})
+            const { fnWithBackpack, emptyBackpack, throwItem } = carryBackpack({fn, expiry: { ttlInSec: 10 }})
             expect(await fnWithBackpack(10)).toEqual(11)
             expect(await fnWithBackpack(10)).toEqual(11)
 
@@ -93,7 +93,7 @@ describe(carryBackpack, function () {
     describe('various scenarios', () => {
         const runs = [
             {name: 'plain ol backpack', options: {}},
-            {name: 'backpack with expiry', options: { expiry: { ttl: 10 } }},
+            {name: 'backpack with expiry', options: { expiry: { ttlInSec: 10 } }},
         ];
 
         runs.forEach(run => {
